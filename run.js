@@ -3,6 +3,7 @@ const path = require(`path`);
 
 const { log } = require(`./logs`);
 const { pExec } = require(`./utils`);
+const { getGatsbyPackages } = require(`./gatsby-packages`)
 const fs = require(`fs-extra`);
 const childProcess = require("child_process");
 
@@ -150,21 +151,35 @@ const runSite = async task => {
     updateProcess(`Cleaning after baseline (rm -rf .cache public)`)
   );
 
-  // if it builds with v8-serialize
+  // if it builds with next
+  const { dependencies, devDependencies } = getGatsbyPackages(repoAbsPath)
 
-  await measureTime(`Build from canary`, () =>
-    pExec(
-      `yarn add gatsby@v8-serialize`,
-      execArgs,
-      updateProcess(`Installing v8-serialize`)
-    )
-  );
+  if (!dependencies.length && !devDependencies.length) {
+    throw new Error(`Site ${task.repo} has no gatsby dependency`)
+  }
 
-  await measureTime(`Re-Build from canary`, () =>
+  await measureTime(`Build from next`, async () => {
+    if (dependencies.length) {
+      await pExec(
+        `yarn add ${dependencies.map(name => `${name}@next`).join(` `)}`,
+        execArgs,
+        updateProcess(`Installing dependencies`)
+      )
+    }
+    if (devDependencies.length) {
+      await pExec(
+        `yarn add ${devDependencies.map(name => `${name}@next`).join(` `)} --dev`,
+        execArgs,
+        updateProcess(`Installing devDependencies`)
+      )
+    }
+  });
+
+  await measureTime(`Re-Build from next`, () =>
     pExec(
       `yarn gatsby build`,
       execArgs,
-      updateProcess(`First v8.serialize build`)
+      updateProcess(`First build at "next"`)
     )
   );
 
@@ -172,6 +187,6 @@ const runSite = async task => {
   await pExec(
     `yarn gatsby build`,
     execArgs,
-    updateProcess(`Second v8.serialize build`)
+    updateProcess(`Second build at "next"`)
   );
 };
